@@ -1,125 +1,113 @@
-cleanup='rm \
-  job1 job2 job3 job4 \
-  echo1 echo2 echo3 echo4 \
-  status1 status2 status3 status4 \
-  2>/dev/null || true'
+work_n() {
+  local n="$1"
+  echo start job "$n"
+  sleep 1
+  job_yield_status 0
+  echo end job "$n"
+}
+
+work1() { work_n 1; }
+work2() { work_n 2; }
+work3() { work_n 3; }
+work4() { work_n 4; }
+
+job_yield_status() {
+  echo "$1" > "job_status_$job_self"
+  rm "job_$name"
+}
+
+job_check_status_file() {
+  local sts
+  sts=$(cat "$1")
+  test _"$sts" != _0 && { echo "Job '$1' failed: code '$sts'"; exit 1; }
+}
+
+job_spawn() {
+  local name="$1" ; shift
+  local func="$1" ; shift
+
+  test -z "$name" && { echo "$0: error: job name is empty"; return 1; }
+  test -z "$func" && { echo "$0: error: job func is empty"; return 1; }
+
+  eval "job_done_$name=r"
+  eval "touch job_$name"
+  eval "job_self=\"$name\" $func 2>&1 > job_output_$name &"
+}
+
+job_check() {
+  local name="$1" ; shift
+  local start_func="$1" ; shift
+  local on_finish="$1" ; shift
+
+  test -z "$name" && { echo "$0: error: job name is empty"; return 1; }
+  test -z "$start_func" && { echo "$0: error: start_func is empty"; return 1; }
+  test -z "$on_finish" && { echo "$0: error: on_finish is empty"; return 1; }
+
+  eval '
+  case "$job_done_'"$name"'" in
+    y) job_done_'"$name"'=yy
+      job_check_status_file job_status_'"$name"'
+      '"$on_finish"'
+      ;;
+    yy) ;;
+    r) job_alldone=n ; test ! -f job_'"$name"' && job_done_'"$name"'=y ;;
+    *) job_alldone=n
+      '"$start_func"'
+      ;;
+  esac
+  '
+}
+
+job_is_done() {
+  local name="$1" ; shift
+
+  eval 'test _"$job_done_'"$name"'" = _yy && return 0'
+  return 1
+}
+
+job_report() {
+  local name="$1" ; shift
+
+  echo "Output of job $name : {{"
+  cat "job_output_$name"
+  echo "}}"
+}
+
+job_cleanup() {
+  local name="$1" ; shift
+
+  rm "job_$name" "job_output_$name" "job_status_$name" 2>/dev/null || true
+}
+
+start_job1() { job_spawn 1 work1; }
+start_job2() { job_spawn 2 work2; }
+
+work3_work4() {
+  if job_is_done 1 && job_is_done 2 ; then
+    job_spawn 3 work3
+    job_spawn 4 work4
+  fi
+}
+
+cleanup='
+for job in 1 2 3 4
+do job_cleanup "$job"
+done
+'
 
 eval "$cleanup"
 trap "$cleanup" EXIT
 
-work1() {
-  echo start job 1
-  sleep 1
-  echo 0 > status1
-  rm job1
-  echo end job 1
-}
-
-work2() {
-  echo start job 2
-  sleep 1
-  echo 0 > status2
-  rm job2
-  echo end job 2
-}
-
-work3() {
-  echo start job 3
-  sleep 1
-  echo 0 > status3
-  rm job3
-  echo end job 3
-}
-
-work4() {
-  echo start job 4
-  sleep 1
-  echo 0 > status4
-  rm job4
-  echo end job 4
-}
-
-
-done1=""
-done2=""
-done3=""
-
-check_status_file() {
-  local sts
-  sts=$(cat "$1")
-  test _"$sts" != _0 && { echo "Checking status file '$1' failed"; exit 1; }
-}
-
-done1=r
-touch job1
-work1 > echo1 &
-
 while true
 do
-  alldone=y
+  job_alldone=y
 
-  case "$done1" in
-    y)
-      check_status_file status1
-      done1=yy
-      done2=r
-      touch job2
-      work2 > echo2 &
-      ;;
-    yy) ;;
-    r) alldone=n ; test ! -f job1 && done1=y ;;
-  esac
+  job_check 1 start_job1 start_job2
+  job_check 2 true true
+  job_check 3 work3_work4 true
+  job_check 4 work3_work4 true
 
-  case "$done2" in
-    y)
-      check_status_file status2
-      done2=yy
-      ;;
-    yy) ;;
-    r) alldone=n ; test ! -f job2 && done2=y ;;
-  esac
-
-  case "$done3" in
-    y)
-      done3=yy
-      check_status_file status3
-      ;;
-    yy) ;;
-    r) alldone=n ; test ! -f job3 && done3=y ;;
-    *)
-      alldone=n
-      if test _"$done1" = _yy -a _"$done2" = _yy ; then
-        done3=r
-        touch job3
-        work3 > echo3 &
-        done4=r
-        touch job4
-        work4 > echo4 &
-      fi
-      ;;
-  esac
-
-  case "$done4" in
-    y)
-      done4=yy
-      check_status_file status4
-      ;;
-    yy) ;;
-    r) alldone=n ; test ! -f job4 && done4=y ;;
-    *)
-      alldone=n
-      if test _"$done1" = _yy -a _"$done2" = _yy ; then
-        done3=r
-        touch job3
-        work3 > echo3 &
-        done4=r
-        touch job4
-        work4 > echo4 &
-      fi
-      ;;
-  esac
-
-  if test _"$alldone" = _y ; then
+  if test _"$job_alldone" = _y ; then
     break
   fi
 
@@ -128,20 +116,8 @@ done
 
 echo All done
 
-echo "Output1: {{"
-cat echo1
-echo "}}"
-
-echo "Output3: {{"
-cat echo2
-echo "}}"
-
-echo "Output3: {{"
-cat echo3
-echo "}}"
-
-echo "Output4: {{"
-cat echo4
-echo "}}"
+for job in 1 2 3 4
+do job_report "$job"
+done
 
 eval "$cleanup"
