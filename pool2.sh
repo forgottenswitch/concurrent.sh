@@ -37,11 +37,10 @@ job_spawn() {
 job_check() {
   local name="$1" ; shift
   local start_func="$1" ; shift
-  local on_finish="$1" ; shift
+  local on_finish="$1"
 
   test -z "$name" && { echo "$0: error: job name is empty"; return 1; }
   test -z "$start_func" && { echo "$0: error: start_func is empty"; return 1; }
-  test -z "$on_finish" && { echo "$0: error: on_finish is empty"; return 1; }
 
   eval '
   case "$job_done_'"$name"'" in
@@ -102,10 +101,10 @@ while true
 do
   job_alldone=y
 
-  job_check 1 start_job1 start_job2
-  job_check 2 true true
-  job_check 3 work3_work4 true
-  job_check 4 work3_work4 true
+  job_check 1 start_job1
+  job_check 2 start_job2
+  job_check 3 work3_work4
+  job_check 4 work3_work4
 
   if test _"$job_alldone" = _y ; then
     break
