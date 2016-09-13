@@ -6,7 +6,8 @@ job_yield_status() {
 job_check_status_file() {
   local sts
   sts=$(cat "$1")
-  test _"$sts" != _0 && { echo "Job '$1' failed: code '$sts'"; exit 1; }
+  test _"$sts" != _0 && { echo "$sts"; return 1; }
+  return 0
 }
 
 job_spawn() {
@@ -25,15 +26,20 @@ job_check() {
   local name="$1" ; shift
   local start_func="$1" ; shift
   local on_finish="$1"
+  local on_fail="$2"
 
   test -z "$name" && { echo "$0: error: job name is empty"; return 1; }
   test -z "$start_func" && { echo "$0: error: start_func is empty"; return 1; }
+  test -z "$on_finish" && on_finish="true"
+  test -z "$on_fail" && on_fail="true"
 
   eval '
   case "$job_done_'"$name"'" in
     y) job_done_'"$name"'=yy
-      job_check_status_file job_status_'"$name"'
-      '"$on_finish"'
+      if job_check_status_file job_status_'"$name"' > /dev/null
+      then '"$on_finish"'
+      else '"$on_fail"'
+      fi
       ;;
     yy) ;;
     r) job_alldone=n ; test ! -f job_'"$name"' && job_done_'"$name"'=y ;;
@@ -83,8 +89,14 @@ work3_work4() {
   fi
 }
 
+work_fail() {
+  echo start fail job
+  job_yield_status 1
+  echo end fail job
+}
+
 cleanup='
-for job in 1 2 3 4
+for job in 1 2 3 4 test_fail
 do job_cleanup "$job"
 done
 '
@@ -101,6 +113,11 @@ do
   job_check 3 work3_work4 "job_report 3"
   job_check 4 work3_work4 "job_report 4"
 
+  job_check test_fail \
+    "job_spawn test_fail work_fail" \
+    "job_report test_fail; echo; echo test_fail ok unexpectedly.; echo" \
+    "job_report test_fail; echo; echo test_fail failed as expected.; echo"
+
   if test _"$job_alldone" = _y ; then
     break
   fi
@@ -111,3 +128,4 @@ done
 echo All done
 
 eval "$cleanup"
+
