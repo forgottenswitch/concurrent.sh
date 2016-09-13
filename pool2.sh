@@ -1,7 +1,7 @@
 cleanup='rm \
-  job1 job2 job3 \
-  echo1 echo2 echo3 \
-  status1 status2 status3 \
+  job1 job2 job3 job4 \
+  echo1 echo2 echo3 echo4 \
+  status1 status2 status3 status4 \
   2>/dev/null || true'
 
 eval "$cleanup"
@@ -31,14 +31,18 @@ work3() {
   echo end job 3
 }
 
+work4() {
+  echo start job 4
+  sleep 1
+  echo 0 > status4
+  rm job4
+  echo end job 4
+}
+
 
 done1=""
 done2=""
 done3=""
-
-touch job1
-touch job2
-touch job3
 
 check_status_file() {
   local sts
@@ -46,8 +50,9 @@ check_status_file() {
   test _"$sts" != _0 && { echo "Checking status file '$1' failed"; exit 1; }
 }
 
-work1 > echo1 &
 done1=r
+touch job1
+work1 > echo1 &
 
 while true
 do
@@ -58,6 +63,7 @@ do
       check_status_file status1
       done1=yy
       done2=r
+      touch job2
       work2 > echo2 &
       ;;
     yy) ;;
@@ -83,8 +89,32 @@ do
     *)
       alldone=n
       if test _"$done1" = _yy -a _"$done2" = _yy ; then
-        work3 > echo3 &
         done3=r
+        touch job3
+        work3 > echo3 &
+        done4=r
+        touch job4
+        work4 > echo4 &
+      fi
+      ;;
+  esac
+
+  case "$done4" in
+    y)
+      done4=yy
+      check_status_file status4
+      ;;
+    yy) ;;
+    r) alldone=n ; test ! -f job4 && done4=y ;;
+    *)
+      alldone=n
+      if test _"$done1" = _yy -a _"$done2" = _yy ; then
+        done3=r
+        touch job3
+        work3 > echo3 &
+        done4=r
+        touch job4
+        work4 > echo4 &
       fi
       ;;
   esac
@@ -108,6 +138,10 @@ echo "}}"
 
 echo "Output3: {{"
 cat echo3
+echo "}}"
+
+echo "Output4: {{"
+cat echo4
 echo "}}"
 
 eval "$cleanup"
