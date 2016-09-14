@@ -1,6 +1,5 @@
 job_yield_status() {
   echo "$1" > "job_status_$job_self"
-  rm "job_$name"
 }
 
 job_check_status_file() {
@@ -18,15 +17,14 @@ job_spawn() {
   test -z "$func" && { echo "$0: error: job func is empty"; return 1; }
 
   eval "job_done_$name=r"
-  eval "touch job_$name"
+  rm "job_status_$name" 2>/dev/null
   eval "job_self=\"$name\" job_spawn_run $func 2>&1 > job_output_$name &"
 }
 
 job_spawn_run() {
   "$@"
-  test -f "job_$job_self" && {
+  test ! -f "job_status_$job_self" && {
     echo -n > "job_status_$job_self"
-    rm "job_$job_self"
   }
 }
 
@@ -50,7 +48,7 @@ job_check() {
       fi
       ;;
     yy) ;;
-    r) job_alldone=n ; test ! -f job_'"$name"' && job_done_'"$name"'=y ;;
+    r) job_alldone=n ; test -f job_status_'"$name"' && job_done_'"$name"'=y ;;
     *) job_alldone=n
       '"$start_func"'
       ;;
@@ -76,7 +74,7 @@ job_report() {
 job_cleanup() {
   local name="$1" ; shift
 
-  rm "job_$name" "job_output_$name" "job_status_$name" 2>/dev/null || true
+  rm "job_output_$name" "job_status_$name" 2>/dev/null || true
 }
 
 work_n() {
