@@ -196,14 +196,11 @@ peach_check() {
   test -z "$name" && { echo "$0: name is empty"; return 1; }
   test -z "$func" && { echo "$0: func is empty"; return 1; }
 
-  echo "peach_check $name {{"
-  echo " job_done_$name: $(eval "echo \"\$job_done_$name\"")"
   job_check "$name" \
     "peach_spawn_job $name '$func'" \
     "peach_on_yield $name" \
     "peach_on_yield $name" \
     ;
-  echo "}}"
 }
 
 #
@@ -213,8 +210,6 @@ peach_on_yield() {
   local name="$1" ; shift
 
   test -z "$name" && { echo "$0: name is empty"; return 1; }
-
-  echo "peach: job $name yielded"
 
   peach_n_active=$((peach_n_active-1))
   peach_n_done=$((peach_n_done+1))
@@ -234,10 +229,8 @@ peach_spawn_job() {
   test -z "$func" && { echo "$0: func is empty"; return 1; }
 
   if test $((peach_n_active)) "<" $((peach_n_max)) ; then
-    echo "peach_spawn_job $name: active=$peach_n_active max=$peach_n_max func=[$func]"
     peach_n_active=$((peach_n_active+1))
     job_spawn "$name" "$func"
-    echo "peach_spawn_job $name: spawned"
   fi
 }
 
