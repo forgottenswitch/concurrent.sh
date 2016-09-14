@@ -1,5 +1,8 @@
+# Where to place (small) temprorary files (should be ramfs)
+test -z "$job_prefix" && job_prefix="tmp"
+
 job_yield_status() {
-  echo "$1" > "job_status_$job_self"
+  echo "$1" > "$job_prefix/job_status_$job_self"
 }
 
 job_check_status_file() {
@@ -17,14 +20,14 @@ job_spawn() {
   test -z "$func" && { echo "$0: error: job func is empty"; return 1; }
 
   eval "job_done_$name=r"
-  rm "job_status_$name" 2>/dev/null
+  rm "$job_prefix/job_status_$name" 2>/dev/null
   eval "job_self=\"$name\" job_spawn_run $func &"
 }
 
 job_spawn_run() {
   "$@"
-  test ! -f "job_status_$job_self" && {
-    echo -n > "job_status_$job_self"
+  test ! -f "$job_prefix/job_status_$job_self" && {
+    echo -n > "$job_prefix/job_status_$job_self"
   }
 }
 
@@ -42,13 +45,13 @@ job_check() {
   eval '
   case "$job_done_'"$name"'" in
     y) job_done_'"$name"'=yy
-      if job_check_status_file job_status_'"$name"' > /dev/null
+      if job_check_status_file "'"$job_prefix"'/job_status_'"$name"'" > /dev/null
       then '"$on_finish"'
       else '"$on_fail"'
       fi
       ;;
     yy) ;;
-    r) job_alldone=n ; test -f job_status_'"$name"' && job_done_'"$name"'=y ;;
+    r) job_alldone=n ; test -f "'"$job_prefix"'/job_status_'"$name"'" && job_done_'"$name"'=y ;;
     *) job_alldone=n
       '"$start_func"'
       ;;
@@ -66,7 +69,7 @@ job_is_done() {
 job_cleanup() {
   local name="$1" ; shift
 
-  rm "job_status_$name" 2>/dev/null || true
+  rm "$job_prefix/job_status_$name" 2>/dev/null || true
 }
 
 work_n() {
@@ -101,15 +104,29 @@ work_fail() {
   echo end fail job
 }
 
+#
+# Prepare directory for temprorary files;
+# Clean it up on exit.
+#
+
+job_prefix_exists=n
+test -e "$job_prefix" && job_prefix_exists=y
+
 cleanup='
 for job in 1 2 3 4 test_fail noexist
 do job_cleanup "$job"
    rm "work_output_$job" 2>/dev/null
 done
+test _"'"$job_prefix_exists"'" != _y && rmdir "'"$job_prefix"'" 2>/dev/null
 '
-
 eval "$cleanup"
 trap "$cleanup" EXIT
+
+test _"$job_prefix_exists" != _y && mkdir -p "$job_prefix"
+
+#
+# Main loop
+#
 
 while true
 do
@@ -138,6 +155,3 @@ do
 done
 
 echo All done
-
-eval "$cleanup"
-
