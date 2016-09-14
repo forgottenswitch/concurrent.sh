@@ -11,7 +11,7 @@
 source ./job.sh
 
 #
-# Peach the lines of stdin as commands,
+# Peach the lines of stdin as FUNCs for job_spawn,
 # executing at most N simultaneously.
 # Arguments: N
 #
@@ -101,6 +101,7 @@ peach_spawn_job() {
     echo "peach_spawn_job $name: active=$peach_n_active max=$peach_n_max func=[$func]"
     peach_n_active=$((peach_n_active+1))
     job_spawn "$name" "$func"
+    echo "peach_spawn_job $name: spawned"
   fi
 }
 
@@ -125,27 +126,22 @@ test _"$job_prefix_exists" != _y && mkdir -p "$job_prefix"
 # Main
 #
 
-echo 'sleep 1 ; echo job 1 end ; job_yield_status 0
-      sleep 1 ; echo job 2 end ; job_yield_status 0
-      sleep 1 ; echo job 3 end ; job_yield_status 0
-      sleep 1 ; echo job 4 end ; job_yield_status 0
-      sleep 1 ; echo job 4 end ; job_yield_status 0
-      sleep 1 ; echo job 4 end ; job_yield_status 0
-      sleep 1 ; echo job 4 end ; job_yield_status 0
-      sleep 1 ; echo job 4 end ; job_yield_status 0
-      sleep 1 ; echo job 4 end ; job_yield_status 0
-      sleep 1 ; echo job 4 end ; job_yield_status 0
-      sleep 1 ; echo job 4 end ; job_yield_status 0
-      sleep 1 ; echo job 4 end ; job_yield_status 0
-      sleep 1 ; echo job 4 end ; job_yield_status 0
-      sleep 1 ; echo job 4 end ; job_yield_status 0
-      sleep 1 ; echo job 4 end ; job_yield_status 0
-      sleep 1 ; echo job 4 end ; job_yield_status 0
-      sleep 1 ; echo job 4 end ; job_yield_status 0
-      sleep 1 ; echo job 4 end ; job_yield_status 0
-      sleep 1 ; echo job 4 end ; job_yield_status 0
-      sleep 1 ; echo job 5 end ; job_yield_status 0
-      sleep 1 ; echo job 6 end ; job_yield_status 0' \
+work_n() {
+  local name="$1" ; shift
+
+  sleep 1
+  echo "job $name end"
+  job_yield_status 0
+}
+
+echo 'work_n 1
+      work_n 2
+      work_n 3
+      work_n 4
+      work_n 5
+      work_n 6
+      work_n 7
+      work_n 8' \
         | peach_lines 4
 
 echo All done

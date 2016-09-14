@@ -42,6 +42,7 @@ job_check_status_file() {
 # - NAME consists only of [a-zA-Z0-9_] characters
 # - FUNC is valid shell expression, such as
 #   'routine_that_yields arg1 arg2 2>&1 > log_of_routine_that_yields'
+# - FUNC does not contain ["';] characters
 #
 job_spawn() {
   local name="$1" ; shift
