@@ -48,6 +48,7 @@ This relies on:
 Tested with:
 - Bash 4.3.42(1)
 - Dash 0.5.8.2
+- Mksh 52
 
 # License
 MIT license.
