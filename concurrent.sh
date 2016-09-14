@@ -160,7 +160,7 @@ peach_lines() {
   local loop_code=''
   local n=1
 
-  while read
+  while read REPLY
   do
     loop_code="${loop_code}
     peach_check ${n} '""$REPLY""'"

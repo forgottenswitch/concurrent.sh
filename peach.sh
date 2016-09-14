@@ -8,7 +8,7 @@
 # iterate over jobs, executing no more than a given limit at a time.
 #
 
-source ./concurrent.sh
+. ./concurrent.sh
 
 #
 # Prepare the directory for job status communcation temprorary files.
