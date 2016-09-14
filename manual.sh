@@ -53,7 +53,7 @@
 #  done
 #
 
-source ./job.sh
+source ./concurrent.sh
 
 #
 # An example of worker routines.
