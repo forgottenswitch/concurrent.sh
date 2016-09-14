@@ -19,7 +19,15 @@ job_spawn() {
 
   eval "job_done_$name=r"
   eval "touch job_$name"
-  eval "job_self=\"$name\" $func 2>&1 > job_output_$name &"
+  eval "job_self=\"$name\" job_spawn_run $func 2>&1 > job_output_$name &"
+}
+
+job_spawn_run() {
+  "$@"
+  test -f "job_$job_self" && {
+    echo -n > "job_status_$job_self"
+    rm "job_$job_self"
+  }
 }
 
 job_check() {
@@ -96,7 +104,7 @@ work_fail() {
 }
 
 cleanup='
-for job in 1 2 3 4 test_fail
+for job in 1 2 3 4 test_fail noexist
 do job_cleanup "$job"
 done
 '
@@ -117,6 +125,11 @@ do
     "job_spawn test_fail work_fail" \
     "job_report test_fail; echo; echo test_fail ok unexpectedly.; echo" \
     "job_report test_fail; echo; echo test_fail failed as expected.; echo"
+
+  job_check noexist \
+    "job_spawn  noexist work_noexist" \
+    "job_report noexist; echo; echo noexist ok unexpectedly.; echo" \
+    "job_report noexist; echo; echo noexist failed as expected.; echo"
 
   if test _"$job_alldone" = _y ; then
     break
