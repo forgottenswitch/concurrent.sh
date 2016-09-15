@@ -186,6 +186,11 @@ job_cleanup() {
 }
 
 #
+# How often, in seconds, to poll during peaching.
+#
+peach_poll_interval="0.1"
+
+#
 # Peach (parallel-each, same as "make -jN")
 # the lines of $2 as FUNCs for job_spawn,
 # executing at most N simultaneously.
@@ -212,7 +217,7 @@ peach_lines() {
       break
     fi
 
-    sleep 0.05
+    sleep $peach_poll_interval
   done
   "
 

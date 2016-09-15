@@ -24,6 +24,7 @@ work_n() {
   job_yield_status 0
 }
 
+peach_poll_interval=0.05
 peach_lines 4 \
      'work_n 1
       work_n 2
