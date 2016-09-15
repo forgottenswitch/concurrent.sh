@@ -235,6 +235,7 @@ peach_checks_code() {
 
   while read REPLY
   do
+    test -z "$REPLY" && continue
     echo "peach_check ${n} '""$REPLY""'"
     n=$((n+1))
   done
