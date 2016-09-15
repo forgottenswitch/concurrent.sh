@@ -186,22 +186,24 @@ job_cleanup() {
 }
 
 #
+# How many jobs to execute simultaneously when peaching.
+# Same as N in "make -jN"
+#
+peach_n_max=4
+
+#
 # How often, in seconds, to poll during peaching.
 #
 peach_poll_interval="0.1"
 
 #
 # Peach (parallel-each, same as "make -jN")
-# the lines of $2 as FUNCs for job_spawn,
+# the lines of $1 as FUNCs for job_spawn,
 # executing at most N simultaneously.
-# Arguments: N FUNC_LIST
+# Arguments: FUNC_LIST
 #
 peach_lines() {
-  local max_jobs="$1" ; shift
   local func_list="$1" ; shift
-
-  test -z "$max_jobs" && max_jobs="$peach_default_n_max"
-  peach_n_max=$((max_jobs))
 
   local loop_code
 

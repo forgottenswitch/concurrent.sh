@@ -25,7 +25,8 @@ work_n() {
 }
 
 peach_poll_interval=0.05
-peach_lines 4 \
+peach_n_max=4
+peach_lines \
      'work_n 1
       work_n 2
       work_n 3
