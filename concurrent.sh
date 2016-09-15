@@ -4,7 +4,21 @@
 #
 # This should be on ramfs.
 #
-test -z "$job_prefix" && job_prefix="tmp"
+test -z "$job_prefix" && job_prefix=$(mktemp -d)
+
+#
+# Prepare temprorary directory.
+# Tell the shell to delete it on exit.
+#
+job_prepare_tempdir() {
+  local remove_job_files="rm \"$job_prefix\"/job_* 2>/dev/null"
+  local remove_job_dir="rmdir \"$job_prefix\" 2>/dev/null"
+
+  eval "$remove_job_files"
+  trap "$remove_job_files ; $remove_job_dir" EXIT
+
+  test ! -e "$job_prefix" && mkdir -p "$job_prefix"
+}
 
 #
 # Communicate with the main loop shell, telling it

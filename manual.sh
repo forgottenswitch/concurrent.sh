@@ -107,24 +107,14 @@ work3_work4() {
 }
 
 #
-# Prepare the directory for job status communcation temprorary files.
-# Clean it up on exit.
+# Main
 #
 
-job_prefix_exists=n
-test -e "$job_prefix" && job_prefix_exists=y
+job_prepare_tempdir
 
-cleanup='
-for job in 1 2 3 4 test_fail noexist
-do job_cleanup "$job"
-   rm "work_output_$job" 2>/dev/null
-done
-test _"'"$job_prefix_exists"'" != _y && rmdir "'"$job_prefix"'" 2>/dev/null
-'
-eval "$cleanup"
-trap "$cleanup" EXIT
-
-test _"$job_prefix_exists" != _y && mkdir -p "$job_prefix"
+remove_work_output="rm work_output_* 2>/dev/null"
+eval "$remove_work_output"
+trap "$remove_work_output" EXIT
 
 #
 # Main loop

@@ -10,22 +10,7 @@
 
 . ./concurrent.sh
 
-#
-# Prepare the directory for job status communcation temprorary files.
-# Clean it up on exit.
-#
-
-job_prefix_exists=n
-test -e "$job_prefix" && job_prefix_exists=y
-
-cleanup='
-rm "'"$job_prefix"'"/job_* 2>/dev/null
-rmdir "'"$job_prefix"'" 2>/dev/null
-'
-eval "$cleanup"
-trap "$cleanup" EXIT
-
-test _"$job_prefix_exists" != _y && mkdir -p "$job_prefix"
+job_prepare_tempdir
 
 #
 # Main
