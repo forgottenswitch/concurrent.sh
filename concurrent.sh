@@ -84,15 +84,15 @@ job_spawn_run() {
 # If NAME is not yet job_spawn()-ed, calls START.
 # If NAME is spawned, but not job_yield_status()-ed yet,
 #  checks for job_status_NAME file to be present (in job_prefix dir);
-#  if it exists, the job is considered just-done.
-# If NAME is just-done, reads the status file, and calls either ON_SUCCESS or ON_FAIL.
-#  The job is considered done.
+#  If it exists, the job is just-done:
+#    Read the status file, and call either ON_SUCCESS or ON_FAIL.
+#    The job is considered done.
 # If NAME is done, does nothing.
 #
-# If NAME is not done or just-done, does "job_alldone=n".
+# If NAME is not done, does "job_alldone=n".
 # This is to allow for breaking out of the main loop once all the jobs complete.
 #
-# Todo: remove just-done, add ON_DONE and ON_NOT_DONE.
+# TODO: add ON_DONE and ON_NOT_DONE.
 #
 job_check() {
   local name="$1" ; shift
@@ -107,15 +107,20 @@ job_check() {
 
   eval '
   case "$job_done_'"$name"'" in
-    y) job_done_'"$name"'=yy
-      if job_check_status_file "'"$job_prefix"'/job_status_'"$name"'" > /dev/null
-      then '"$on_finish"'
-      else '"$on_fail"'
+    y)
+      ;;
+    r)
+      job_alldone=n
+      if test -f "'"$job_prefix"'/job_status_'"$name"'" ; then
+        job_done_'"$name"'=y
+        if job_check_status_file "'"$job_prefix"'/job_status_'"$name"'" > /dev/null
+          then '"$on_finish"'
+          else '"$on_fail"'
+        fi
       fi
       ;;
-    yy) ;;
-    r) job_alldone=n ; test -f "'"$job_prefix"'/job_status_'"$name"'" && job_done_'"$name"'=y ;;
-    *) job_alldone=n
+    *)
+      job_alldone=n
       '"$start_func"'
       ;;
   esac
@@ -131,7 +136,7 @@ job_check() {
 job_is_done() {
   local name="$1" ; shift
 
-  eval 'test _"$job_done_'"$name"'" = _yy && return 0'
+  eval 'test _"$job_done_'"$name"'" = _y && return 0'
   return 1
 }
 
