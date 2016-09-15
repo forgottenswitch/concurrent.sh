@@ -25,7 +25,7 @@ However, a threaded POSIX shell is not feasible, because:
 
 # Features
 - Create a job (thread emulated by an async subshell).
-- Hook job termination.
+- Hook job termination (and running).
 - Query job state ("is running" and "exit code").
 - Peach a list of jobs.
   Peach stands for "parallel-each", like `make -jN`.

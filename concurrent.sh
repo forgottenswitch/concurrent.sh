@@ -88,7 +88,7 @@ job_spawn_run() {
 
 #
 # Examines the current state of a job, and performs a corresponding action.
-# Arguments: NAME START [ON_SUCCESS ON_FAIL]
+# Arguments: NAME START [ON_SUCCESS ON_FAIL ON_RUNNING ON_DONE]
 #
 # NAME is the job identifier.
 # START is a spawner-expression that should call "job_spawn NAME ...".
@@ -102,27 +102,31 @@ job_spawn_run() {
 #  If it exists, the job is just-done:
 #    Read the status file, and call either ON_SUCCESS or ON_FAIL.
 #    The job is considered done.
-# If NAME is done, does nothing.
+#  Otherwise, calls ON_RUNNING.
+# If NAME is done, calls ON_DONE.
 #
 # If NAME is not done, does "job_alldone=n".
 # This is to allow for breaking out of the main loop once all the jobs complete.
-#
-# TODO: add ON_DONE and ON_NOT_DONE.
 #
 job_check() {
   local name="$1" ; shift
   local start_func="$1" ; shift
   local on_finish="$1"
   local on_fail="$2"
+  local on_running="$3"
+  local on_done="$4"
 
   test -z "$name" && { echo "$0: error: job name is empty"; return 1; }
   test -z "$start_func" && { echo "$0: error: start_func is empty"; return 1; }
   test -z "$on_finish" && on_finish="true"
   test -z "$on_fail" && on_fail="true"
+  test -z "$on_running" && on_running="true"
+  test -z "$on_done" && on_done="true"
 
   eval '
   case "$job_done_'"$name"'" in
     y)
+      '"$on_done"'
       ;;
     r)
       job_alldone=n
@@ -132,6 +136,8 @@ job_check() {
         then '"$on_finish"'
         else '"$on_fail"'
         fi
+      else
+        '"$on_running"'
       fi
       ;;
     *)
