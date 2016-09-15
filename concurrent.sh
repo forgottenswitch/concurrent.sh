@@ -19,13 +19,29 @@ job_yield_status() {
 
 #
 # Internal routine for reading the job_yield_status.
-# Returns successfully only if "0" was read.
+# Return successfully if the file was read.
 #
-job_check_status_file() {
+job_read_status_file() {
+  local name="$1" ; shift
+
+  local filepath="$job_prefix/job_status_$name"
   local sts
-  sts=$(cat "$1")
-  test _"$sts" != _0 && { echo "$sts"; return 1; }
+
+  test ! -f "$filepath" && return 1
+  sts=$(cat "$filepath")
+  eval "job_exit_code_$name=$sts"
   return 0
+}
+
+#
+# Print the yielded job exit code
+#
+job_yielded_status() {
+  local name="$1" ; shift
+
+  test -z "$name" && { echo "$0: error: job name is empty"; return 1; }
+
+  eval "echo \"\$job_exit_code_$name\""
 }
 
 #
@@ -35,7 +51,6 @@ job_check_status_file() {
 # Spawns an async subshell executing FUNC.
 # Once FUNC calls job_yield_status(), it would be observable
 # in the main loop through job_is_done().
-# TODO: implement job_exit_code().
 #
 # NOTE: no validity checks are done (for perfomance and simplicity).
 # The caller must ensure that:
@@ -111,11 +126,11 @@ job_check() {
       ;;
     r)
       job_alldone=n
-      if test -f "'"$job_prefix"'/job_status_'"$name"'" ; then
+      if job_read_status_file '"$name"' ; then
         job_done_'"$name"'=y
-        if job_check_status_file "'"$job_prefix"'/job_status_'"$name"'" > /dev/null
-          then '"$on_finish"'
-          else '"$on_fail"'
+        if test _"$job_exit_code_'"$name"'" = _0
+        then '"$on_finish"'
+        else '"$on_fail"'
         fi
       fi
       ;;
@@ -155,6 +170,11 @@ job_cleanup() {
 # the lines of stdin as FUNCs for job_spawn,
 # executing at most N simultaneously.
 # Arguments: N
+#
+# NOTE: peaching (currently) runs in a subshell (to read the stdin).
+# This means that job_is_done() and job_exit_status()
+# cannot be used upon peached jobs.
+# TODO: read lines from argument, not stdin
 #
 peach_lines() {
   local max_jobs="$1"

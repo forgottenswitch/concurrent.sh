@@ -26,7 +26,7 @@ However, a threaded POSIX shell is not feasible, because:
 # Features
 - Create a job (thread emulated by an async subshell).
 - Hook job termination.
-- Query job state.
+- Query job state ("is running" and "exit code").
 - Peach a list of jobs.
   Peach stands for "parallel-each", like `make -jN`.
 
@@ -38,7 +38,7 @@ Each poll iteration goes through each job,
 both pending, running, and completed.
 If you have hundreds, parallelize each 50 or so in turn.
 
-This relies on:
+This library relies on:
 - Temprorary files to be not touched by another program/script
   (filenames-being-unique-enough).
 - Async subshells implemented by forking.

@@ -69,12 +69,12 @@ work_n() {
 
 work_fail() {
   echo start fail job
-  job_yield_status 1
+  job_yield_status 123
   echo end fail job
 }
 
 #
-# An example of on-success/fail routine.
+# An example of on-success/fail routines.
 #
 work_report() {
   local name="$1" ; shift
@@ -82,6 +82,14 @@ work_report() {
   echo "Output of work $name : {{"
   cat "work_output_$name"
   echo "}}"
+}
+
+test_fail_on_fail() {
+    work_report test_fail
+    echo
+    echo "test_fail failed as expected."
+    echo "the exit code was $(job_yielded_status test_fail)"
+    echo
 }
 
 #
@@ -136,7 +144,7 @@ do
   job_check test_fail \
     "job_spawn test_fail 'work_fail 2>&1 > work_output_test_fail'" \
     "work_report test_fail; echo; echo test_fail ok unexpectedly.; echo" \
-    "work_report test_fail; echo; echo test_fail failed as expected.; echo"
+    test_fail_on_fail
 
   job_check noexist \
     "job_spawn  noexist work_noexist" \
