@@ -167,30 +167,20 @@ job_cleanup() {
 
 #
 # Peach (parallel-each, same as "make -jN")
-# the lines of stdin as FUNCs for job_spawn,
+# the lines of $2 as FUNCs for job_spawn,
 # executing at most N simultaneously.
-# Arguments: N
-#
-# NOTE: peaching (currently) runs in a subshell (to read the stdin).
-# This means that job_is_done() and job_exit_status()
-# cannot be used upon peached jobs.
-# TODO: read lines from argument, not stdin
+# Arguments: N FUNC_LIST
 #
 peach_lines() {
-  local max_jobs="$1"
+  local max_jobs="$1" ; shift
+  local func_list="$1" ; shift
 
   test -z "$max_jobs" && max_jobs="$peach_default_n_max"
   peach_n_max=$((max_jobs))
 
-  local loop_code=''
-  local n=1
+  local loop_code
 
-  while read REPLY
-  do
-    loop_code="${loop_code}
-    peach_check ${n} '""$REPLY""'"
-    n=$((n+1))
-  done
+  loop_code=$(echo "$func_list" | peach_checks_code)
 
   loop_code="
   while true
@@ -207,6 +197,20 @@ peach_lines() {
   "
 
   eval "$loop_code"
+}
+
+#
+# Internal routine outputting lines of code of form:
+#   peach_check N 'STDIN_LINE'
+#
+peach_checks_code() {
+  local n=1
+
+  while read REPLY
+  do
+    echo "peach_check ${n} '""$REPLY""'"
+    n=$((n+1))
+  done
 }
 
 #

@@ -39,7 +39,8 @@ work_n() {
   job_yield_status 0
 }
 
-echo 'work_n 1
+peach_lines 4 \
+     'work_n 1
       work_n 2
       work_n 3
       work_n 4
@@ -47,6 +48,10 @@ echo 'work_n 1
       work_n 6
       work_n 7
       work_n 8' \
-        | peach_lines 4
+     ;
 
 echo All done
+for job_id in 1 2
+do
+  echo "job '$job_id' exit status was '$(job_yielded_status "$job_id")'"
+done
