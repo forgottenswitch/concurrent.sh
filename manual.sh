@@ -76,6 +76,7 @@ work_fail() {
 #
 # An example of on-success/fail routines.
 #
+
 work_report() {
   local name="$1" ; shift
 
