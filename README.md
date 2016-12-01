@@ -26,7 +26,7 @@ Relies on:
 
 # Shells
 Tested with:
-- Bash 4.3.42(1)
+- Bash 4.3.42
 - Dash 0.5.8.2
 - Mksh 52
 
