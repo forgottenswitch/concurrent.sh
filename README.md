@@ -4,6 +4,10 @@ Concurrent.sh
 A concurrency "module" for `/bin/sh` shell.
 Works by polling temprorary files.
 
+# Examples and usage
+Lengthy and clumsy.
+Please see [peach.sh](peach.sh) and [manual.sh](manual.sh).
+
 # Features
 - Create a job (thread emulated by an async subshell).
 - Hook job termination (and running).
