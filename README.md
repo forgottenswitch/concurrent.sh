@@ -31,4 +31,4 @@ Tested with:
 - Mksh 52
 
 # License
-MIT license.
+MIT license, or UNLICENSE.
