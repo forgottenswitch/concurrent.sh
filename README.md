@@ -1,38 +1,31 @@
-Concurrent.sh
+concurrent.sh
 =============
 
 A concurrency "module" for `/bin/sh` shell.
 Works by polling temprorary files.
 
-# Examples and usage
-Lengthy and clumsy.
+Allows to create parallel process (a "job"), hook its termination, query its state.
+
+Usage is lengthy and clumsy.
 Please see [peach.sh](peach.sh) and [manual.sh](manual.sh).
 
-# Features
-- Create a job (thread emulated by an async subshell).
-- Hook job termination (and running).
-- Query job state ("is running" and "exit code").
-- Peach a list of jobs
-  ("parallel-each", like `make -jN`).
-
-Synchronization primitives (mutexes and barriers)
-are not implemented.
+Tested with bash 4.3.42, dash 0.5.8.2, mksh 52.
 
 # Caveats
-Each poll iteration goes through each job,
-both pending, running, and completed.
-If you have hundreds, parallelize each 50 or so in turn.
+Has no semaphores or barriers.
+
+Each poll iteration goes through each job, both pending, running, and completed.
 
 Relies on:
-- Temprorary files to be not touched by another program/script
-  (filenames-being-unique-enough).
+- Temprorary files not to be touched by another process.
 - Async subshells implemented by forking.
 
-# Shells
-Tested with:
-- Bash 4.3.42
-- Dash 0.5.8.2
-- Mksh 52
+# Application usage
+Could be used to parallelize `configure`.
+(Thread-ifying the shell would mean reimplementing subshells as threads
+instead of child processes, due to restrictions imposed by `pthread_atfork`).
+
+In practice, has none.
 
 # License
-MIT license, or UNLICENSE.
+MIT or UNLICENSE.
