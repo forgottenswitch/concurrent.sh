@@ -19,5 +19,3 @@ Relies on:
 - Async subshells implemented by forking.
 
 Works with `bash 4.3.42`, `dash 0.5.8.2`, `mksh 52`.
-
-License: MIT or UNLICENSE.
