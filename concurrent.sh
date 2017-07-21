@@ -70,7 +70,7 @@ job_yielded_status() {
 # The caller must ensure that:
 # - NAME consists only of [a-zA-Z0-9_] characters
 # - FUNC is valid shell expression, such as
-#   'routine_that_yields arg1 arg2 2>&1 > log_of_routine_that_yields'
+#   'routine_that_yields arg1 arg2 > log_of_routine_that_yields 2>&1'
 # - FUNC does not contain ["';] characters
 #
 job_spawn() {
