@@ -18,4 +18,4 @@ Relies on:
 - Temprorary files not to be touched by another process.
 - Async subshells implemented by forking.
 
-Works with `bash 4.3.42`, `dash 0.5.8.2`, `mksh 52`.
+Tested on Linux tmpfs with `bash 4.3.42`, `dash 0.5.8.2`, `mksh 52`.
