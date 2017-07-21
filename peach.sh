@@ -1,11 +1,7 @@
 #!/bin/sh
 
-#
-# Parallel-each for shell demo.
-# Builds on manual.sh demo.
-#
-# Parallel each is the way how make(1) treats its -jN argument:
-# iterate over jobs, executing no more than a given limit at a time.
+# Parallel-each
+# (e.g. the same as `make -jN`)
 #
 
 . ./concurrent.sh
