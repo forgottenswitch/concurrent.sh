@@ -15,7 +15,7 @@ Has no mutexes/barriers.
 Each poll iteration goes through each job, both pending, running, and completed.
 
 Relies on:
-- Temprorary files not to be touched by another process.
+- Temporary files not to be touched by another process.
 - Async subshells implemented by forking.
 
 Tested on Linux tmpfs with `bash 4.3.42`, `dash 0.5.8.2`, `mksh 52`.

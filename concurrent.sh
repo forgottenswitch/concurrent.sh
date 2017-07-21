@@ -7,7 +7,7 @@
 test -z "$job_prefix" && job_prefix=$(mktemp -d)
 
 #
-# Prepare temprorary directory.
+# Prepare temporary directory.
 # Tell the shell to delete it on exit.
 #
 job_prepare_tempdir() {
@@ -69,7 +69,7 @@ job_yielded_status() {
 # NOTE: no validity checks are done (for perfomance and simplicity).
 # The caller must ensure that:
 # - NAME consists only of [a-zA-Z0-9_] characters
-# - FUNC is valid shell expression, such as
+# - FUNC is a valid shell expression, such as
 #   'routine_that_yields arg1 arg2 > log_of_routine_that_yields 2>&1'
 # - FUNC does not contain ["';] characters
 #
@@ -101,7 +101,7 @@ job_spawn_run() {
 }
 
 #
-# Examines the current state of a job, and performs a corresponding action.
+# Examines the current state of a job, and performs corresponding action.
 # Arguments: NAME START [ON_SUCCESS ON_FAIL ON_RUNNING ON_DONE]
 #
 # NAME is the job identifier.
