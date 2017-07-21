@@ -33,6 +33,8 @@ activate_atexit() {
 # Prepare temporary directory.
 # Tell the shell to delete it on exit.
 #
+# See also job_spawn_sync_daemon().
+#
 job_prepare_tempdir() {
   local remove_job_files="rm \"$job_prefix\"/job_* 2>/dev/null"
   local remove_job_dir="rmdir \"$job_prefix\" 2>/dev/null"
@@ -41,6 +43,7 @@ job_prepare_tempdir() {
   atexit "$remove_job_files ; $remove_job_dir"
 
   test ! -e "$job_prefix" && mkdir -p "$job_prefix"
+  activate_atexit
 }
 
 #
@@ -312,5 +315,147 @@ peach_spawn_job() {
     peach_n_active=$((peach_n_active+1))
     job_spawn "$name" "$func"
   fi
+}
+
+#
+# Helper process for emulating synchronization.  Reads requests from a named
+# pipe (fifo), and writes reply to per-job fifo upon deciding to wake a job up.
+#
+# Note that it depends on simultaneous writes to fifo from several processes not
+# to be interveined. (Which might as well be not guaranteed).
+#
+
+job_sync_daemon_poll_interval="0.01"
+
+job_spawn_sync_daemon() {
+  job_sync_daemon &
+  atexit "kill $! 2>/dev/null"
+
+  while true ; do
+    sleep 0.01
+    if test -e "$job_prefix"/sync_fifo ; then
+      sleep 0.005
+      break
+    fi
+  done
+}
+
+job_sync_daemon() {
+  sync_fifo="$job_prefix"/sync_fifo
+
+  mkfifo "$sync_fifo" || { echo "error: failed to create sync fifo" ; exit 1 ; }
+  atexit "rm $sync_fifo 2>/dev/null"
+
+  while true ; do
+
+    # read a line from fifo
+    read req
+
+    # if fifo is currently empty, but was ever written to,
+    # reading would return an empty string (instead of blocking)
+    if test -z "$req" ; then
+      sleep "$job_sync_daemon_poll_interval"
+      continue
+    fi
+
+    job_sync_daemon_process_request "$req"
+
+  done < "$sync_fifo"
+}
+
+job_sync_daemon_process_request() {
+  local req="$1" ; shift
+
+  # parse the line
+  op="${req%% *}"
+  req="${req#* }"
+  a1="${req%% *}"
+  req="${req#* }"
+  a2="${req%% *}"
+  #req="${req#* }"
+  # end of parsing the line
+
+  case "$op" in
+    barrier_init)
+      name="$a1"
+      capacity="$a2"
+      eval "
+      barrier_capacity_${name}=\"${capacity}\"
+      barrier_jobs_${name}=\"\"
+      "
+      ;;
+    barrier_wait)
+      name="$a1"
+      job="$a2"
+      eval "
+      barrier_count_${name}=\"\$((barrier_count_${name} + 1))\"
+      barrier_jobs_${name}=\"\${barrier_jobs_${name}} ${job}\"
+      if test \"\$((barrier_count_${name}))\" -eq \"\$((barrier_capacity_${name}))\" ; then
+        barrier_count_${name}=0
+        job_sync_daemon_wake_jobs \"\${barrier_jobs_${name}}\"
+      fi
+      "
+      ;;
+  esac
+}
+
+job_sync_daemon_wake_jobs() {
+  local joblist="$1"
+  local jobname
+
+  for jobname in $joblist ; do
+    echo > "$job_prefix"/wakeup_"$jobname"
+  done
+}
+
+#
+# End of synchronization process.
+#
+
+job_sendmsg_to_sync_daemon() {
+  echo "$@" > "$job_prefix"/sync_fifo
+}
+
+job_sendmsg_to_sync_daemon_waiting_for_any_reply() {
+  local wakeup_fifo="$job_prefix"/wakeup_"$job_self"
+  local s
+
+  # Ensure there are no fifos left from previous jobs
+  while ! mkfifo "$wakeup_fifo" 2>/dev/null ; do
+    sleep 0.01
+  done
+
+  trap "rm $wakeup_fifo 2>/dev/null" EXIT
+  echo "$@" > "$job_prefix"/sync_fifo
+  read s < "$wakeup_fifo"
+  rm "$wakeup_fifo"
+}
+
+#
+# Creates a barrier with the given name,
+# that would resume the jobs waiting on it
+# once their number becomes the count supplied.
+# Caller must ensure the name is a valid shell identifier.
+#
+# Arguments: BARRIER_NAME COUNT
+#
+barrier_init() {
+  local barrier_name="$1" ; shift
+  local capacity="$1" ; shift
+
+  job_sendmsg_to_sync_daemon "barrier_init $barrier_name $capacity"
+}
+
+#
+# Waits on a barrier name.
+# Caller must ensure that:
+# - the barrier has been created.
+# - the name is a valid shell identifier.
+# Arguments: BARRIER_NAME
+#
+barrier_wait() {
+  local barrier_name="$1" ; shift
+
+  job_sendmsg_to_sync_daemon_waiting_for_any_reply "barrier_wait $barrier_name $job_self"
 }
 
