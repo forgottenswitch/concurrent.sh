@@ -7,6 +7,29 @@
 test -z "$job_prefix" && job_prefix=$(mktemp -d)
 
 #
+# A 'trap action EXIT' that accumulates the actions over invocations.
+#
+atexit() {
+  local action="$1" ; shift
+
+  atexit_actions="$atexit_actions
+  $action
+  "
+}
+
+atexit_cmds=''
+atexit_invoke_all() {
+  eval "$atexit_actions"
+}
+
+#
+# Call 'trap EXIT' with the action that invokes atexit()s.
+#
+activate_atexit() {
+  trap atexit_invoke_all EXIT
+}
+
+#
 # Prepare temporary directory.
 # Tell the shell to delete it on exit.
 #
@@ -15,7 +38,7 @@ job_prepare_tempdir() {
   local remove_job_dir="rmdir \"$job_prefix\" 2>/dev/null"
 
   eval "$remove_job_files"
-  trap "$remove_job_files ; $remove_job_dir" EXIT
+  atexit "$remove_job_files ; $remove_job_dir"
 
   test ! -e "$job_prefix" && mkdir -p "$job_prefix"
 }

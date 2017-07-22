@@ -18,4 +18,8 @@ Relies on:
 - Temporary files not to be touched by another process.
 - Async subshells implemented by forking.
 
+Requires the user not to call `trap ... EXIT`, as well as not to assign to:
+- `atexit_functions`
+- some variables starting with `job_` and `peach_`.
+
 Tested on Linux tmpfs with `bash 4.3.42`, `dash 0.5.8.2`, `mksh 52`.
