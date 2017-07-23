@@ -523,6 +523,13 @@ job_sendmsg_to_sync_daemon() {
   echo "$@" > "$outfile"
 }
 
+job_rm_wakeup_fifo_on_exit() {
+  if test _"$job_rm_wakeup_fifo_on_exit_ever_called" != _y ; then
+    atexit "rm ${job_prefix}/wakeup_${job_self} 2>/dev/null"
+    job_rm_wakeup_fifo_on_exit_ever_called=y
+  fi
+}
+
 job_sendmsg_to_sync_daemon_waiting_for_reply() {
   local reply_variable="$1" ; shift
 
@@ -533,7 +540,7 @@ job_sendmsg_to_sync_daemon_waiting_for_reply() {
     sleep 0.01
   done
 
-  atexit "rm $wakeup_fifo 2>/dev/null"
+  job_rm_wakeup_fifo_on_exit
   job_sendmsg_to_sync_daemon "$@"
   read "$reply_variable" < "$wakeup_fifo"
   rm "$wakeup_fifo"
@@ -549,7 +556,7 @@ job_wait_for_sync_daemon_reply() {
     sleep 0.01
   done
 
-  atexit "rm $wakeup_fifo 2>/dev/null"
+  job_rm_wakeup_fifo_on_exit
   read "$reply_variable" < "$wakeup_fifo"
   rm "$wakeup_fifo"
 }
