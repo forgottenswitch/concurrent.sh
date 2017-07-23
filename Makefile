@@ -15,4 +15,7 @@ run:
 		$(SH) "$$f" ; \
 	done
 
-.PHONY: all run
+test_fifo:
+	$(SH) test_fifo.sh 100 10000
+
+.PHONY: all run test_fifo
