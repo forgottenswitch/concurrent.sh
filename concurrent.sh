@@ -290,6 +290,10 @@ job_sync_daemon_poll_interval="0.01"
 
 job_spawn_sync_daemon() {
   job_sync_daemon &
+
+  # on exit, close stdout/err prior to signaling the sync daemon in order to
+  # avoid a message stating that job_sync_daemon subshell has been terminated
+  atexit "exec 2>&- 1>&-"
   atexit "kill $! 2>/dev/null"
 
   while true ; do
