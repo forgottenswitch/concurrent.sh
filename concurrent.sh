@@ -217,11 +217,6 @@ job_is_done() {
 peach_n_max=4
 
 #
-# How often, in seconds, to poll during peaching.
-#
-peach_poll_interval="0.1"
-
-#
 # Peach (parallel-each, same as "make -jN")
 # the lines of $1 as FUNCs for job_spawn,
 # executing at most N simultaneously.
@@ -230,99 +225,57 @@ peach_poll_interval="0.1"
 peach_lines() {
   local func_list="$1" ; shift
 
-  local loop_code
+  local f
+  local i
+  local name
+  local reply
 
-  loop_code=$(echo "$func_list" | peach_checks_code)
+  job_sendmsg_to_sync_daemon "peach $peach_n_max $job_self"
 
-  loop_code="
-  while true
-  do
-    job_alldone=y
-    ${loop_code}
+  i=0
+  while test ! -z "$func_list" ; do
 
-    if test _\"\$job_alldone\" = _y ; then
-      break
+    # get next line
+    f="${func_list%%
+*}"
+    func_list_after_newline="${func_list#*
+}"
+    if test _"$func_list_after_newline" = _"$func_list" ; then
+      func_list=''
+    else
+      func_list="$func_list_after_newline"
+    fi
+    # end of getting next line
+
+    # check if line is empty
+    while test _"${f#[ 	]}" != _"$f" ; do
+      f="${f#[ 	]}"
+    done
+    if test -z "$f" ; then
+      continue
     fi
 
-    sleep $peach_poll_interval
+    i="$((i+1))"
+    name="peachjob_$i"
+
+    # tell sync daemon a job is starting; it will reply as soon as a slot in
+    # peach_n_max becomes available
+    job_sendmsg_to_sync_daemon_waiting_for_reply reply "peach_start $name $job_self"
+
+    job_spawn "$name" "$f"
   done
-  "
 
-  eval "$loop_code"
-}
-
-#
-# Internal routine outputting lines of code of form:
-#   peach_check N 'STDIN_LINE'
-#
-peach_checks_code() {
-  local n=1
-
-  while read REPLY
-  do
-    test -z "$REPLY" && continue
-    echo "peach_check ${n} '""$REPLY""'"
-    n=$((n+1))
-  done
-}
-
-#
-# Examines the states of peaching and job passed, and acts accordingly.
-#
-# Sets job_alldone=n if the job has not exited or errored.
-#
-# Arguments: JOB_NAME FUNC
-#
-peach_check() {
-  local name="$1" ; shift
-  local func="$1" ; shift
-
-  test -z "$name" && { echo "$0: name is empty"; return 1; }
-  test -z "$func" && { echo "$0: func is empty"; return 1; }
-
-  case "$(job_get_state "$name")" in
-    none)
-      job_alldone=n
-      peach_spawn_job "$name" "$func"
-      ;;
-    running)
-      job_alldone=n
-      true
-      ;;
-    error) peach_on_yield "$name" ;;
-    exited) peach_on_yield "$name" ;;
-  esac
-}
-
-#
-# Called when a peached job does job_yield_status().
-#
-peach_on_yield() {
-  local name="$1" ; shift
-
-  test -z "$name" && { echo "$0: name is empty"; return 1; }
-
-  peach_n_active=$((peach_n_active-1))
-  peach_n_done=$((peach_n_done+1))
-}
-
-#
-# Job spawning function for peaching.
-# Checks if a slot is available, and if yes,
-# executes the job passed.
-# Arguments: NAME FUNC
-#
-peach_spawn_job() {
-  local name="$1" ; shift
-  local func="$1" ; shift
-
-  test -z "$name" && { echo "$0: name is empty"; return 1; }
-  test -z "$func" && { echo "$0: func is empty"; return 1; }
-
-  if test $((peach_n_active)) "<" $((peach_n_max)) ; then
-    peach_n_active=$((peach_n_active+1))
-    job_spawn "$name" "$func"
+  # wait for sync daemon to respond upon the termination of the final
+  # peach_n_max-1 jobs
+  if test "$((i))" -ge "$(( peach_n_max ))" ; then
+    i="$(( peach_n_max - 1 ))"
+    while test "$((i))" -gt 0 ; do
+      i=$((i-1))
+      job_wait_for_sync_daemon_reply reply
+    done
   fi
+
+  job_sendmsg_to_sync_daemon_waiting_for_reply reply "peach_end"
 }
 
 #
@@ -466,6 +419,12 @@ job_sync_daemon_process_request() {
       eval "
       job_state_${job}=exited
       job_exitcode_${job}=\"${exitcode}\"
+      if test _\"\${job_is_peached_${job}}\" = _y ; then
+        if test ! -z \"\${peaching_job}\" ; then
+          job_sync_daemon_wake_job_waiting_for_it_to_create_a_fifo \"\${peaching_job}\"
+        fi
+      fi
+      job_is_peached_${job}=n
       "
       ;;
     get_job_exitcode)
@@ -473,6 +432,30 @@ job_sync_daemon_process_request() {
       replyto_job="$a2"
       eval "
       job_sync_daemon_send_to_job \"${replyto_job}\" \"\${job_exitcode_${job}}\"
+      "
+      ;;
+    peach)
+      jobs_in_parallel="$a1"
+      peaching_job="$a2"
+      eval "
+      peach_jobs_in_parallel=\"${jobs_in_parallel}\"
+      peach_spawned=0
+      peach_ending=n
+      "
+      ;;
+    peach_start)
+      job="$a1"
+      eval "
+      peach_spawned=\"\$(( peach_spawned + 1 ))\"
+      job_is_peached_${job}=y
+      if test \"\$(( peach_spawned ))\" -le \"\$(( peach_jobs_in_parallel ))\" ; then
+        job_sync_daemon_wake_jobs \"\${peaching_job}\" wake_b
+      fi
+      "
+      ;;
+    peach_end)
+      eval "
+      peach_ending=y
       "
       ;;
     barrier_init)
@@ -514,6 +497,18 @@ job_sync_daemon_send_to_job() {
   echo "$msg" > "$job_prefix"/wakeup_"$jobname"
 }
 
+job_sync_daemon_wake_job_waiting_for_it_to_create_a_fifo() {
+  local jobname="$1" ; shift
+
+  local wakeup_fifo="$job_prefix"/wakeup_"$jobname"
+
+  while test ! -e "$wakeup_fifo" ; do
+    sleep 0.01
+  done
+
+  echo > "$wakeup_fifo"
+}
+
 #
 # End of synchronization process.
 #
@@ -543,6 +538,22 @@ job_sendmsg_to_sync_daemon_waiting_for_reply() {
   read "$reply_variable" < "$wakeup_fifo"
   rm "$wakeup_fifo"
 }
+
+job_wait_for_sync_daemon_reply() {
+  local reply_variable="$1" ; shift
+
+  local wakeup_fifo="$job_prefix"/wakeup_"$job_self"
+
+  # Ensure there are no fifos left from previous jobs
+  while ! mkfifo "$wakeup_fifo" 2>/dev/null ; do
+    sleep 0.01
+  done
+
+  atexit "rm $wakeup_fifo 2>/dev/null"
+  read "$reply_variable" < "$wakeup_fifo"
+  rm "$wakeup_fifo"
+}
+
 
 #
 # Creates a barrier with the given name,
