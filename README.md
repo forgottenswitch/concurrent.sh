@@ -4,12 +4,6 @@ concurrent.sh
 A concurrency "module" for `/bin/sh` shell.
 Works via messaging to a dedicated helper process.
 
-The messaging requires writes to FIFOs to be atomic, otherwise being unreliable
-(leading to deadlocks).  E.g. if shell A does `echo a b c >fifo`, and shell B
-does `echo d e f >fifo`, then `read x <fifo` result should be either `a b c` or
-`d e f`, but not `ad  be f c` or similar.  The `test_fifo.sh` could be used to
-probabilistically check it for a given OS+libc+shell combination.
-
 Allows creating parallel processes ("jobs"), and querying their state.
 Usage is lengthy (see `peach.sh` and `manual.sh`).
 
@@ -22,7 +16,13 @@ Has no mutexes.
 Relies on:
 - Temporary files not to be touched by another process.
 - Async subshells implemented by forking.
-- Writes to FIFOs being atomic.
+- Either:
+  * Writes to FIFOs being uninterveined. E.g. if shell A does `echo a b c >fifo`,
+    and shell B does `echo d e f >fifo`, then `read x <fifo` result should be either
+    `a b c` or `d e f`, but not `ad  be f c` or similar.  The `test_fifo.sh` could
+    be used to probabilistically check this for a given OS+libc+shell combination.
+  * `CONCURRENTSH_TRANSFER` being set to `files`.  The helper process would
+    then poll temporary directory instead of reading from a pipe (FIFO).
 
 Requires the user not to call `trap ... EXIT`, as well as not to assign to
 `atexit_functions`, and some variables starting with `job_` and `peach_`.

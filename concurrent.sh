@@ -37,7 +37,9 @@ activate_atexit() {
 #
 job_prepare_tempdir() {
   local remove_job_prefix="rmdir \"$job_prefix\" 2>/dev/null"
+  local remove_req_files="rm \"$job_prefix\"/req.* 2>/dev/null"
 
+  atexit "$remove_req_files"
   atexit "$remove_job_prefix"
 
   test ! -e "$job_prefix" && mkdir -p "$job_prefix"
@@ -355,21 +357,56 @@ job_sync_daemon() {
   # prevent leaving async shells after exit
   atexit "eval \"kill \${job_pids} 2>/dev/null\" "
 
-  while true ; do
+  case "$CONCURRENTSH_TRANSFER" in
+    files)
+      while true ; do
+        req=''
 
-    # read a line from fifo
-    read req
+        # read a request
+        for f in "$job_prefix"/req.* ; do
+          req_file="$f"
 
-    # if fifo is currently empty, but was ever written to,
-    # reading would return an empty string (instead of blocking)
-    if test -z "$req" ; then
-      sleep "$job_sync_daemon_poll_interval"
-      continue
-    fi
+          # are there any request files
+          if test _"${f%[*]}" = _"$f" ; then
+            read req < "$req_file"
 
-    job_sync_daemon_process_request "$req"
+            # request file could have been created, but not yet written to
+            if test ! -z "$req" ; then
+              break
+            fi
+          fi
+        done
 
-  done < "$sync_fifo"
+        # no requests
+        if test -z "$req" ; then
+          sleep "$job_sync_daemon_poll_interval"
+          continue
+        fi
+
+        job_sync_daemon_process_request "$req"
+
+        rm "$req_file" 2>/dev/null
+
+      done
+      ;;
+    *)
+      while true ; do
+
+        # read a line from fifo
+        read req
+
+        # if fifo is currently empty, but was ever written to,
+        # reading would return an empty string (instead of blocking)
+        if test -z "$req" ; then
+          sleep "$job_sync_daemon_poll_interval"
+          continue
+        fi
+
+        job_sync_daemon_process_request "$req"
+
+      done < "$sync_fifo"
+      ;;
+  esac
 }
 
 job_sync_daemon_process_request() {
@@ -482,7 +519,13 @@ job_sync_daemon_send_to_job() {
 #
 
 job_sendmsg_to_sync_daemon() {
-  echo "$@" > "$job_prefix"/sync_fifo
+  local outfile
+
+  case "$CONCURRENTSH_TRANSFER" in
+    files) outfile="$( mktemp "$job_prefix"/req.XXXXXXXXXXX )" ;;
+    *) outfile="$job_prefix"/sync_fifo ;;
+  esac
+  echo "$@" > "$outfile"
 }
 
 job_sendmsg_to_sync_daemon_waiting_for_reply() {
@@ -496,7 +539,7 @@ job_sendmsg_to_sync_daemon_waiting_for_reply() {
   done
 
   atexit "rm $wakeup_fifo 2>/dev/null"
-  echo "$@" > "$job_prefix"/sync_fifo
+  job_sendmsg_to_sync_daemon "$@"
   read "$reply_variable" < "$wakeup_fifo"
   rm "$wakeup_fifo"
 }
