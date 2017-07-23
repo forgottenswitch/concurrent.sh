@@ -26,8 +26,10 @@ Relies on:
 
 Requires the user not to call `trap ... EXIT`, as well as not to assign to
 `atexit_functions`, and some variables starting with `job_` and `peach_`.
-Manually created async subshells need to assign a unique value to `job_self`
-before invoking concurrency functions.
+Manually created async subshells, before invoking concurrency functions, need
+to assign a unique value to `job_self`, and then call `job_create_wakeup_fifo`.
+
+Takes up a file descriptor for communicating with the helper.
 
 Tested on:
 - Linux tmpfs, glibc 2.25, bash 4.3.42, dash 0.5.8.2, mksh 52.

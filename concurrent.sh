@@ -4,6 +4,13 @@
 test -z "$job_prefix" && job_prefix=$(mktemp -d)
 
 #
+# What file descriptor to use for communicating with sync daemon
+#
+if test "$(( job_wakeup_fifo_fd ))" -eq 0 ; then
+  job_wakeup_fifo_fd=9
+fi
+
+#
 # Ensure sync daemon requests work in main process
 #
 job_self=main
@@ -45,6 +52,7 @@ job_prepare_tempdir() {
   test ! -e "$job_prefix" && mkdir -p "$job_prefix"
   activate_atexit
 
+  job_create_wakeup_fifo
   job_spawn_sync_daemon
 }
 
@@ -72,7 +80,7 @@ job_yielded_status() {
     job_sendmsg_to_sync_daemon_waiting_for_reply reply \"get_job_exitcode ${name} ${job_self}\"
     job_yielded_status_of_${name}=\"\${reply}\"
   fi
-  if test -z \"\${job_yielded_status_of_${name}}\" ; then
+  if test _\"\${job_yielded_status_of_${name}#[0123456789]}\" = _\"\${job_yielded_status_of_${name}}\" ; then
     echo 'none'
   else
     echo \"\${job_yielded_status_of_${name}}\"
@@ -116,8 +124,27 @@ job_spawn() {
 # - FUNC does not call job_yield_status
 #
 job_spawn_run() {
+  job_create_wakeup_fifo
   "$@"
   job_sendmsg_to_sync_daemon "set_job_state ${job_self} err"
+}
+
+#
+# Establish pipe for sync daemon
+#
+job_create_wakeup_fifo() {
+  local wakeup_fifo="$job_prefix"/wakeup_"$job_self"
+
+  mkfifo "$wakeup_fifo"
+
+  # avoid an infinite wait for any write when opening the pipe for reading below
+  echo > "$wakeup_fifo" &
+
+  eval "exec ${job_wakeup_fifo_fd}<\"${wakeup_fifo}\""
+
+  # close and remove the pipe on exit
+  atexit "exec ${job_wakeup_fifo_fd}>&-"
+  atexit "rm \"${wakeup_fifo}\" 2>/dev/null"
 }
 
 #
@@ -282,6 +309,10 @@ peach_lines() {
 # Helper process for emulating synchronization.  Reads requests from a named
 # pipe (fifo), and writes reply to per-job fifo upon deciding to wake a job up.
 #
+# It must not send empty replies, as they would be ignored (due to reads from
+# fifos not being blocking once it had been written to), which would lead to
+# an infinite loop in the listening job.
+#
 # Note that it depends on simultaneous writes to fifo from several processes not
 # to be interveined. (Which might as well be not guaranteed).
 #
@@ -425,7 +456,7 @@ job_sync_daemon_process_request() {
       job_exitcode_${job}=\"${exitcode}\"
       if test _\"\${job_is_peached_${job}}\" = _y ; then
         if test ! -z \"\${peaching_job}\" ; then
-          job_sync_daemon_wake_job_waiting_for_it_to_create_a_fifo \"\${peaching_job}\"
+          job_sync_daemon_wake_jobs \"\${peaching_job}\"
         fi
       fi
       job_is_peached_${job}=n
@@ -435,7 +466,7 @@ job_sync_daemon_process_request() {
       job="$a1"
       replyto_job="$a2"
       eval "
-      job_sync_daemon_send_to_job \"${replyto_job}\" \"\${job_exitcode_${job}}\"
+      job_sync_daemon_send_to_job \"${replyto_job}\" \"\${job_exitcode_${job}:-unknown}\"
       "
       ;;
     peach)
@@ -490,7 +521,7 @@ job_sync_daemon_wake_jobs() {
   local jobname
 
   for jobname in $joblist ; do
-    job_sync_daemon_send_to_job "$jobname" ""
+    job_sync_daemon_send_to_job "$jobname" wake
   done
 }
 
@@ -499,18 +530,6 @@ job_sync_daemon_send_to_job() {
   local msg="$1" ; shift
 
   echo "$msg" > "$job_prefix"/wakeup_"$jobname"
-}
-
-job_sync_daemon_wake_job_waiting_for_it_to_create_a_fifo() {
-  local jobname="$1" ; shift
-
-  local wakeup_fifo="$job_prefix"/wakeup_"$jobname"
-
-  while test ! -e "$wakeup_fifo" ; do
-    sleep 0.01
-  done
-
-  echo > "$wakeup_fifo"
 }
 
 #
@@ -538,36 +557,22 @@ job_rm_wakeup_fifo_on_exit() {
 job_sendmsg_to_sync_daemon_waiting_for_reply() {
   local reply_variable="$1" ; shift
 
-  local wakeup_fifo="$job_prefix"/wakeup_"$job_self"
-
-  # Ensure there are no fifos left from previous jobs
-  while ! mkfifo "$wakeup_fifo" 2>/dev/null ; do
-    sleep 0.01
-  done
-
-  job_rm_wakeup_fifo_on_exit
   job_sendmsg_to_sync_daemon "$@"
-  while ! read "$reply_variable" < "$wakeup_fifo" >/dev/null 2>&1 ; do
-    true
-  done
-  rm "$wakeup_fifo"
+  job_wait_for_sync_daemon_reply "$reply_variable"
 }
 
 job_wait_for_sync_daemon_reply() {
   local reply_variable="$1" ; shift
 
-  local wakeup_fifo="$job_prefix"/wakeup_"$job_self"
-
-  # Ensure there are no fifos left from previous jobs
-  while ! mkfifo "$wakeup_fifo" 2>/dev/null ; do
+  eval "
+  while true ; do
+    read ${reply_variable} <&${job_wakeup_fifo_fd}
+    if test ! -z \"\${${reply_variable}}\" ; then
+      break
+    fi
     sleep 0.01
   done
-
-  job_rm_wakeup_fifo_on_exit
-  while ! read "$reply_variable" < "$wakeup_fifo" >/dev/null 2>&1 ; do
-    true
-  done
-  rm "$wakeup_fifo"
+  "
 }
 
 
