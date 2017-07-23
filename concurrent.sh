@@ -526,6 +526,7 @@ job_sendmsg_to_sync_daemon() {
 job_rm_wakeup_fifo_on_exit() {
   if test _"$job_rm_wakeup_fifo_on_exit_ever_called" != _y ; then
     atexit "rm ${job_prefix}/wakeup_${job_self} 2>/dev/null"
+    atexit "rmdir ${job_prefix} 2>/dev/null"
     job_rm_wakeup_fifo_on_exit_ever_called=y
   fi
 }
