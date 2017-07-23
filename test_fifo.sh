@@ -71,6 +71,8 @@ while test "$((i))" -lt "$((n_processes))" ; do
   writer_pids="$writer_pids $!"
 done
 
+toreceive="$(( n_writes * n_processes ))"
+
 receivecount=0
 while true ; do
   read s
@@ -98,7 +100,10 @@ while true ; do
     done
   done
 
+  printf "Received ${receivecount}/${toreceive} lines\r"
+
   if test ! -z "$s" ; then
+    echo
     echo "Error: received interveined input:"
     echo "  $s0"
     echo "Seen as:"
@@ -106,4 +111,5 @@ while true ; do
     exit 1
   fi
 done < "$the_fifo"
+echo
 echo "Done ($receivecount lines received, none interveined)."
