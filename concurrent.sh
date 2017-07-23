@@ -1,10 +1,12 @@
 #
-# Where to place small temprorary files
-# for communicating job status to main loop.
-#
-# This should be on ramfs.
+# Where to place temporary files
 #
 test -z "$job_prefix" && job_prefix=$(mktemp -d)
+
+#
+# Ensure sync daemon requests work in main process
+#
+job_self=main
 
 #
 # A 'trap action EXIT' that accumulates the actions over invocations.
@@ -33,55 +35,47 @@ activate_atexit() {
 # Prepare temporary directory.
 # Tell the shell to delete it on exit.
 #
-# See also job_spawn_sync_daemon().
-#
 job_prepare_tempdir() {
-  local remove_job_files="rm \"$job_prefix\"/job_* 2>/dev/null"
-  local remove_job_dir="rmdir \"$job_prefix\" 2>/dev/null"
+  local remove_job_prefix="rmdir \"$job_prefix\" 2>/dev/null"
 
-  eval "$remove_job_files"
-  atexit "$remove_job_files ; $remove_job_dir"
+  atexit "$remove_job_prefix"
 
   test ! -e "$job_prefix" && mkdir -p "$job_prefix"
   activate_atexit
+
+  job_spawn_sync_daemon
 }
 
 #
 # Communicate with the main loop shell, telling it
 # that this job terminated with status $1.
 #
-# This must be called once per job.
-# Result of the subsequent invocations is undefined.
+# Subsequent invocations from the same job have no effect.
 #
 job_yield_status() {
-  echo "$1" > "$job_prefix/job_status_$job_self"
+  job_sendmsg_to_sync_daemon "set_job_exitcode $job_self $1"
 }
 
 #
-# Internal routine for reading the job_yield_status.
-# Return successfully if the file was read.
-#
-job_read_status_file() {
-  local name="$1" ; shift
-
-  local filepath="$job_prefix/job_status_$name"
-  local sts
-
-  test ! -f "$filepath" && return 1
-  sts=$(cat "$filepath")
-  eval "job_exit_code_$name=$sts"
-  return 0
-}
-
-#
-# Print the yielded job exit code
+# Print the yielded job exit code, or 'none'.
+# Arguments: JOB_NAME
 #
 job_yielded_status() {
   local name="$1" ; shift
 
-  test -z "$name" && { echo "$0: error: job name is empty"; return 1; }
+  local reply=''
 
-  eval "echo \"\$job_exit_code_$name\""
+  eval "
+  if test -z \"\${job_yielded_status_of_${name}}\" ; then
+    job_sendmsg_to_sync_daemon_waiting_for_reply reply \"get_job_exitcode ${name} ${job_self}\"
+    job_yielded_status_of_${name}=\"\${reply}\"
+  fi
+  if test -z \"\${job_yielded_status_of_${name}}\" ; then
+    echo 'none'
+  else
+    echo \"\${job_yielded_status_of_${name}}\"
+  fi
+  "
 }
 
 #
@@ -90,7 +84,7 @@ job_yielded_status() {
 #
 # Spawns an async subshell executing FUNC.
 # Once FUNC calls job_yield_status(), it would be observable
-# in the main loop through job_is_done().
+# in the main loop through job_get_state() and job_yielded_status().
 #
 # NOTE: no validity checks are done (for perfomance and simplicity).
 # The caller must ensure that:
@@ -106,14 +100,13 @@ job_spawn() {
   test -z "$name" && { echo "$0: error: job name is empty"; return 1; }
   test -z "$func" && { echo "$0: error: job func is empty"; return 1; }
 
-  eval "job_done_$name=r"
-  rm "$job_prefix/job_status_$name" 2>/dev/null
+  job_sendmsg_to_sync_daemon "set_job_state ${name} r"
   eval "job_self=\"$name\" job_spawn_run $func &"
 }
 
 #
 # Internal routine for running a worker FUNC,
-# ensuring the job 'status file' exists afterwards.
+# ensuring the job status is set afterwards.
 #
 # This handles the invalid FUNC cases:
 # - FUNC is not found
@@ -121,32 +114,42 @@ job_spawn() {
 #
 job_spawn_run() {
   "$@"
-  test ! -f "$job_prefix/job_status_$job_self" && {
-    echo -n > "$job_prefix/job_status_$job_self"
-  }
+  job_sendmsg_to_sync_daemon "set_job_state ${job_self} err"
+}
+
+#
+# Retrieves the current state of a job.
+# Echoes one of 'none', 'running', 'error', 'exited'.
+# Arguments: JOB_NAME
+#
+job_get_state() {
+  local job_name="$1" ; shift
+
+  local reply=''
+
+  job_sendmsg_to_sync_daemon_waiting_for_reply reply "get_job_state ${job_name} ${job_self}"
+  echo "$reply"
 }
 
 #
 # Examines the current state of a job, and performs corresponding action.
-# Arguments: NAME START [ON_SUCCESS ON_FAIL ON_RUNNING ON_DONE]
+# Arguments: NAME START [ON_SUCCESS ON_FAIL ON_RUNNING]
 #
 # NAME is the job identifier.
 # START is a spawner-expression that should call "job_spawn NAME ...".
 # ON_SUCCESS is an expression to be evaluated if ... of job_spawn
 #  calls "job_yield_status 0".
 # ON_FAIL is an expression to be evaluated otherwise.
+# Retrieves the current state of a job.
+# Echoes one of 'none', 'running', 'error', 'exited'.
+# Arguments: JOB_NAME
 #
 # If NAME is not yet job_spawn()-ed, calls START.
-# If NAME is spawned, but not job_yield_status()-ed yet,
-#  checks for job_status_NAME file to be present (in job_prefix dir);
-#  If it exists, the job is just-done:
-#    Read the status file, and call either ON_SUCCESS or ON_FAIL.
-#    The job is considered done.
-#  Otherwise, calls ON_RUNNING.
-# If NAME is done, calls ON_DONE.
 #
 # If NAME is not done, does "job_alldone=n".
 # This is to allow for breaking out of the main loop once all the jobs complete.
+#
+# This function relies on user not to set job_check_seen_done_<job_name> variable.
 #
 job_check() {
   local name="$1" ; shift
@@ -164,51 +167,44 @@ job_check() {
   test -z "$on_done" && on_done="true"
 
   eval '
-  case "$job_done_'"$name"'" in
-    y)
-      '"$on_done"'
-      ;;
-    r)
-      job_alldone=n
-      if job_read_status_file '"$name"' ; then
-        job_done_'"$name"'=y
-        if test _"$job_exit_code_'"$name"'" = _0
-        then '"$on_finish"'
-        else '"$on_fail"'
-        fi
-      else
-        '"$on_running"'
-      fi
-      ;;
-    *)
+  case "$( job_get_state "'"$name"'" )" in
+    none)
       job_alldone=n
       '"$start_func"'
+      ;;
+    running)
+      job_alldone=n
+      '"$on_running"'
+      ;;
+    exited|error)
+      if test _"${job_check_seen_done_'"$name"'}" != _y ; then
+        case "$( job_yielded_status "'"$name"'" )" in
+          0)
+            '"$on_finish"'
+            ;;
+          *)
+            '"$on_fail"'
+            ;;
+        esac
+      fi
+      job_check_seen_done_'"$name"'=y
       ;;
   esac
   '
 }
 
 #
-# Check whether a job terminated.
-# Aguments: NAME
-#
-# Must only be called from the main loop.
+# Helper around job_get_state()
+# Returns whether the job was running, and now is not.
+# Arguments: JOB_NAME
 #
 job_is_done() {
-  local name="$1" ; shift
+  local job_name="$1" ; shift
 
-  eval 'test _"$job_done_'"$name"'" = _y && return 0'
+  case "$( job_get_state "$job_name" )" in
+    error|exited) return 0 ;;
+  esac
   return 1
-}
-
-#
-# Remove any temprorary files related to status communication of a job.
-# Arguments: NAME
-#
-job_cleanup() {
-  local name="$1" ; shift
-
-  rm "$job_prefix/job_status_$name" 2>/dev/null || true
 }
 
 #
@@ -268,9 +264,11 @@ peach_checks_code() {
 }
 
 #
-# Examines the states of peaching and job passed,
-# and acts accordingly.
-# Arguments: NAME FUNC
+# Examines the states of peaching and job passed, and acts accordingly.
+#
+# Sets job_alldone=n if the job has not exited or errored.
+#
+# Arguments: JOB_NAME FUNC
 #
 peach_check() {
   local name="$1" ; shift
@@ -279,11 +277,18 @@ peach_check() {
   test -z "$name" && { echo "$0: name is empty"; return 1; }
   test -z "$func" && { echo "$0: func is empty"; return 1; }
 
-  job_check "$name" \
-    "peach_spawn_job $name '$func'" \
-    "peach_on_yield $name" \
-    "peach_on_yield $name" \
-    ;
+  case "$(job_get_state "$name")" in
+    none)
+      job_alldone=n
+      peach_spawn_job "$name" "$func"
+      ;;
+    running)
+      job_alldone=n
+      true
+      ;;
+    error) peach_on_yield "$name" ;;
+    exited) peach_on_yield "$name" ;;
+  esac
 }
 
 #
@@ -376,6 +381,52 @@ job_sync_daemon_process_request() {
   # end of parsing the line
 
   case "$op" in
+    set_job_state)
+      job="$a1"
+      state="$a2"
+      eval "
+      if test -z \"\${job_exitcode_${job}}\" ; then
+        case \"${state}\" in
+          r) job_state_${job}=r ;;
+          err) job_state_${job}=err ;;
+        esac
+      fi
+      "
+      ;;
+    get_job_state)
+      job="$a1"
+      replyto_job="$a2"
+      eval "
+      msg=''
+      case \"\${job_state_${job}}\" in
+        r) msg='running' ;;
+        err) msg='error' ;;
+        *)
+          if test -z \"\${job_exitcode_${job}}\" ; then
+            msg='none'
+          else
+            msg='exited'
+          fi
+          ;;
+      esac
+      job_sync_daemon_send_to_job \"${replyto_job}\" \"\${msg}\"
+      "
+      ;;
+    set_job_exitcode)
+      job="$a1"
+      exitcode="$a2"
+      eval "
+      job_state_${job}=exited
+      job_exitcode_${job}=\"${exitcode}\"
+      "
+      ;;
+    get_job_exitcode)
+      job="$a1"
+      replyto_job="$a2"
+      eval "
+      job_sync_daemon_send_to_job \"${replyto_job}\" \"\${job_exitcode_${job}}\"
+      "
+      ;;
     barrier_init)
       name="$a1"
       capacity="$a2"
@@ -404,8 +455,15 @@ job_sync_daemon_wake_jobs() {
   local jobname
 
   for jobname in $joblist ; do
-    echo > "$job_prefix"/wakeup_"$jobname"
+    job_sync_daemon_send_to_job "$jobname" ""
   done
+}
+
+job_sync_daemon_send_to_job() {
+  local jobname="$1" ; shift
+  local msg="$1" ; shift
+
+  echo "$msg" > "$job_prefix"/wakeup_"$jobname"
 }
 
 #
@@ -416,18 +474,19 @@ job_sendmsg_to_sync_daemon() {
   echo "$@" > "$job_prefix"/sync_fifo
 }
 
-job_sendmsg_to_sync_daemon_waiting_for_any_reply() {
+job_sendmsg_to_sync_daemon_waiting_for_reply() {
+  local reply_variable="$1" ; shift
+
   local wakeup_fifo="$job_prefix"/wakeup_"$job_self"
-  local s
 
   # Ensure there are no fifos left from previous jobs
   while ! mkfifo "$wakeup_fifo" 2>/dev/null ; do
     sleep 0.01
   done
 
-  trap "rm $wakeup_fifo 2>/dev/null" EXIT
+  atexit "rm $wakeup_fifo 2>/dev/null"
   echo "$@" > "$job_prefix"/sync_fifo
-  read s < "$wakeup_fifo"
+  read "$reply_variable" < "$wakeup_fifo"
   rm "$wakeup_fifo"
 }
 
@@ -456,6 +515,8 @@ barrier_init() {
 barrier_wait() {
   local barrier_name="$1" ; shift
 
-  job_sendmsg_to_sync_daemon_waiting_for_any_reply "barrier_wait $barrier_name $job_self"
+  local reply=''
+
+  job_sendmsg_to_sync_daemon_waiting_for_reply reply "barrier_wait $barrier_name $job_self"
 }
 

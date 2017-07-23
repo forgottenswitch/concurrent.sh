@@ -115,7 +115,7 @@ job_prepare_tempdir
 
 remove_work_output="rm work_output_* 2>/dev/null"
 eval "$remove_work_output"
-trap "$remove_work_output" EXIT
+atexit "$remove_work_output"
 
 #
 # Main loop

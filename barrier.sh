@@ -6,7 +6,6 @@
 . ./concurrent.sh
 
 job_prepare_tempdir
-job_spawn_sync_daemon
 
 #
 # Main
