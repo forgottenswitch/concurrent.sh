@@ -102,6 +102,7 @@ job_spawn() {
 
   job_sendmsg_to_sync_daemon "set_job_state ${name} r"
   eval "job_self=\"$name\" job_spawn_run $func &"
+  job_sendmsg_to_sync_daemon "set_job_pid ${name} $!"
 }
 
 #
@@ -351,6 +352,9 @@ job_sync_daemon() {
   mkfifo "$sync_fifo" || { echo "error: failed to create sync fifo" ; exit 1 ; }
   atexit "rm $sync_fifo 2>/dev/null"
 
+  # prevent leaving async shells after exit
+  atexit "eval \"kill \${job_pids} 2>/dev/null\" "
+
   while true ; do
 
     # read a line from fifo
@@ -381,6 +385,13 @@ job_sync_daemon_process_request() {
   # end of parsing the line
 
   case "$op" in
+    set_job_pid)
+      job="$a1"
+      pid="$a2"
+      eval "
+      job_pids=\"\${job_pids} ${pid}\"
+      "
+      ;;
     set_job_state)
       job="$a1"
       state="$a2"
