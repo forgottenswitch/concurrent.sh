@@ -547,7 +547,9 @@ job_sendmsg_to_sync_daemon_waiting_for_reply() {
 
   job_rm_wakeup_fifo_on_exit
   job_sendmsg_to_sync_daemon "$@"
-  read "$reply_variable" < "$wakeup_fifo"
+  while ! read "$reply_variable" < "$wakeup_fifo" >/dev/null 2>&1 ; do
+    true
+  done
   rm "$wakeup_fifo"
 }
 
@@ -562,7 +564,9 @@ job_wait_for_sync_daemon_reply() {
   done
 
   job_rm_wakeup_fifo_on_exit
-  read "$reply_variable" < "$wakeup_fifo"
+  while ! read "$reply_variable" < "$wakeup_fifo" >/dev/null 2>&1 ; do
+    true
+  done
   rm "$wakeup_fifo"
 }
 
