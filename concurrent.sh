@@ -356,7 +356,7 @@ job_sync_daemon() {
 
           # are there any request files
           if test _"${f%[*]}" = _"$f" ; then
-            read req < "$req_file"
+            read -r req < "$req_file"
 
             # request file could have been created, but not yet written to
             if test ! -z "$req" ; then
@@ -381,7 +381,7 @@ job_sync_daemon() {
       while true ; do
 
         # read a line from fifo
-        read req
+        read -r req
 
         # if fifo is currently empty, but was ever written to,
         # reading would return an empty string (instead of blocking)
@@ -566,7 +566,7 @@ job_wait_for_sync_daemon_reply() {
 
   eval "
   while true ; do
-    read ${reply_variable} <&${job_wakeup_fifo_fd}
+    read -r ${reply_variable} <&${job_wakeup_fifo_fd}
     if test ! -z \"\${${reply_variable}}\" ; then
       break
     fi
