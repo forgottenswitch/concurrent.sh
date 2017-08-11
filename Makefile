@@ -5,6 +5,7 @@ EXAMPLES = \
 	peach.sh \
 	barrier.sh \
 	join.sh \
+	locks.sh \
 	$()
 
 all:

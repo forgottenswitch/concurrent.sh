@@ -11,7 +11,8 @@ Could possibly be used to parallelize `configure`.
 (Thread-ifying the shell would mean reimplementing subshells as threads
 instead of child processes, due to restrictions imposed by `pthread_atfork`).
 
-Has no mutexes.
+There are no mutexes, - only non-recursive, non-error-checking, non-robust
+spinning locks.
 
 Relies on:
 - Temporary files not to be touched by another process.

@@ -535,6 +535,39 @@ job_sync_daemon_process_request() {
       fi
       "
       ;;
+    spin_lock)
+      name="$a1"
+      job="$a2"
+      eval "
+      if test _\"\${spin_locked_${name}}\" != _y ; then
+        spin_locked_${name}=y
+        job_sync_daemon_wake_jobs \"${job}\"
+      else
+        spin_waiters_${name}=\"\${spin_waiters_${name}} ${job}\"
+      fi
+      "
+      ;;
+    spin_trylock)
+      name="$a1"
+      job="$a2"
+      eval "
+      if test _\"\${spin_locked_${name}}\" != _y ; then
+        spin_locked_${name}=y
+        job_sync_daemon_send_to_job \"${job}\" ok
+      else
+        job_sync_daemon_send_to_job \"${job}\" fail
+      fi
+      "
+      ;;
+    spin_unlock)
+      name="$a1"
+      job="$a2"
+      eval "
+      spin_locked_${name}=n
+      job_sync_daemon_wake_jobs \"${job} \${spin_waiters_${name}}\"
+      spin_waiters_${name}=''
+      "
+      ;;
   esac
 }
 
@@ -626,5 +659,44 @@ barrier_wait() {
   local reply=''
 
   job_sendmsg_to_sync_daemon_waiting_for_reply reply "barrier_wait $barrier_name $job_self"
+}
+
+#
+# Locks a spinlock, waiting for it if not already locked.
+# Arguments: SPINLOCK_NAME
+#
+spin_lock() {
+  local name="$1" ; shift
+
+  local reply=''
+
+  job_sendmsg_to_sync_daemon_waiting_for_reply reply "spin_lock $name $job_self"
+}
+
+#
+# Attempts to lock a spinlock.
+# Returns non-zero if the lock is already held by some job.
+# Arguments: SPINLOCK_NAME
+#
+spin_trylock() {
+  local name="$1" ; shift
+
+  local reply=''
+
+  job_sendmsg_to_sync_daemon_waiting_for_reply reply "spin_trylock $name $job_self"
+  return "$((reply))"
+}
+
+#
+# Unlocks a spinlock.
+# May be called by any job, not just the one who locked the spinlock.
+# Arguments: SPINLOCK_NAME
+#
+spin_unlock() {
+  local name="$1" ; shift
+
+  local reply=''
+
+  job_sendmsg_to_sync_daemon_waiting_for_reply reply "spin_unlock $name $job_self"
 }
 
