@@ -3,16 +3,20 @@ concurrent.sh
 
 A concurrency "module" for `/bin/sh` shell.
 Works via messaging to a dedicated helper process.
+Far from being complete.
 
-Allows creating parallel processes ("jobs"), and querying their state.
-Usage is lengthy (see `peach.sh` and `manual.sh`).
+Written out of wishing for `configure` scripts to be parallelized.
+Thread-ifying the shell itself would mean reimplementing subshells as threads
+instead of child processes, due to restrictions imposed by `pthread_atfork`.
 
-Could possibly be used to parallelize `configure`.
-(Thread-ifying the shell would mean reimplementing subshells as threads
-instead of child processes, due to restrictions imposed by `pthread_atfork`).
-
-There are no mutexes, - only non-recursive, non-error-checking, non-robust
-spinning locks.
+Primitives available:
+- spawn process (a "job")
+- query job state
+- join a job (wait for it to exit)
+- parallel-each
+- waiting on an N-job barrier
+- lock/try-to-lock/unlock a spinning lock
+  (The locks are non-recursive, non-error-checking, and non-robust).
 
 Relies on:
 - Temporary files not to be touched by another process.
