@@ -4,6 +4,7 @@ EXAMPLES = \
 	manual.sh \
 	peach.sh \
 	barrier.sh \
+	join.sh \
 	$()
 
 all:

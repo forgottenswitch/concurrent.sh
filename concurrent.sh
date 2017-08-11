@@ -162,6 +162,28 @@ job_get_state() {
 }
 
 #
+# Waits for a job to finish.
+# Arguments: JOB_NAME
+#
+job_join() {
+  local job_name="$1" ; shift
+
+  # It polls, instead of waiting for a sync daemon reply
+  # about the job_name becoming completed, as the reply wait
+  # would have resulted in repeated reads from fifo anyway.
+  while true ; do
+    case "$( job_get_state "$job_name" )" in
+      none|running)
+        sleep 0.01
+        ;;
+      error|exited)
+        return
+        ;;
+    esac
+  done
+}
+
+#
 # Examines the current state of a job, and performs corresponding action.
 # Arguments: NAME START [ON_SUCCESS ON_FAIL ON_RUNNING]
 #
