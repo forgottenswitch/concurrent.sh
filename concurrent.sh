@@ -684,7 +684,10 @@ spin_trylock() {
   local reply=''
 
   job_sendmsg_to_sync_daemon_waiting_for_reply reply "spin_trylock $name $job_self"
-  return "$((reply))"
+  if test _"$reply" != _ok ; then
+    return 1
+  fi
+  return 0
 }
 
 #
